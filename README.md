@@ -2,6 +2,19 @@
 
 Why did we choose polling over a queue? Does the reason still hold? This offline demo lets an engineer review an architecture decision against the information on file at two points in time.
 
+## What you’ll see
+
+In **Latest review**, the decision record pairs each original premise with the later evidence. Open **Inspect the rule trace** to see why DICE recommends revisiting polling. Follow an input to its source excerpt. The replay drill is still unproven, so the approved ADR stays in force.
+
+![Architecture decision review with paired source excerpts, the Revisit polling rule, and the unproven replay drill](https://github.com/embabel/dice-architecture-decisions/releases/download/readme-screenshots/decision-review-desktop.png)
+
+<details>
+<summary>Mobile view</summary>
+
+![Mobile architecture decision record with the revision controls and source evidence](https://github.com/embabel/dice-architecture-decisions/releases/download/readme-screenshots/decision-review-mobile.png)
+
+</details>
+
 ## Run it
 
 Install Java 21, then use the Maven wrapper.

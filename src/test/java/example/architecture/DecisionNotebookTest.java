@@ -6,7 +6,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class DecisionNotebookTest {
 
-    private final DecisionNotebook notebook = new DecisionNotebook();
+    private final DecisionNotebook notebook = new DecisionNotebook(new DecisionProperties(0.8));
 
     @Test
     void preservesTheRecordedRationaleAndProvesWhyItMatteredAtAdoption() {
@@ -19,6 +19,16 @@ class DecisionNotebookTest {
         assertThat(adopted.decision().filename()).isEqualTo("docs/adr/0024-webhook-dispatch.md");
         assertThat(adopted.assumptions()).extracting(DecisionNotebook.Assumption::status)
                 .containsExactly("holding", "holding", "unproven");
+    }
+
+    @Test
+    void evidenceBelowTheProjectionFloorDoesNotProveAPosture() {
+        var strict = new DecisionNotebook(new DecisionProperties(0.99));
+        var review = strict.inspect("review");
+
+        assertThat(review.posture().rule()).isNull();
+        assertThat(review.posture().evidence()).isEmpty();
+        assertThat(review.decision()).isEqualTo(notebook.inspect("review").decision());
     }
 
     @Test

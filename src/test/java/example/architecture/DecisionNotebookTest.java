@@ -1,6 +1,7 @@
 package example.architecture;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -22,13 +23,26 @@ class DecisionNotebookTest {
     }
 
     @Test
-    void evidenceBelowTheProjectionFloorDoesNotProveAPosture() {
-        var strict = new DecisionNotebook(new DecisionProperties(0.99));
-        var review = strict.inspect("review");
+    void configuredProjectionFloorCanWithholdTheRecommendation() {
+        new ApplicationContextRunner()
+                .withUserConfiguration(ArchitectureDecisionsApplication.class)
+                .withPropertyValues("decisions.minimum-evidence-confidence=0.99")
+                .run(context -> {
+                    var review = context.getBean(DecisionNotebook.class).inspect("review");
+                    assertThat(review.posture().label()).isEqualTo("No source-backed conclusion");
+                    assertThat(review.posture().rule()).isNull();
+                    assertThat(review.posture().evidence()).isEmpty();
+                    assertThat(review.decision()).isEqualTo(notebook.inspect("review").decision());
+                });
+    }
 
-        assertThat(review.posture().rule()).isNull();
-        assertThat(review.posture().evidence()).isEmpty();
-        assertThat(review.decision()).isEqualTo(notebook.inspect("review").decision());
+    @Test
+    void anInvalidProjectionFloorFailsAtStartup() {
+        new ApplicationContextRunner()
+                .withUserConfiguration(ArchitectureDecisionsApplication.class)
+                .withPropertyValues("decisions.minimum-evidence-confidence=1.1")
+                .run(context -> assertThat(context.getStartupFailure())
+                        .hasRootCauseMessage("Minimum evidence confidence must be between 0 and 1"));
     }
 
     @Test

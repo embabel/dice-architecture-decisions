@@ -51,7 +51,13 @@ The shipped decision record is a read-only fixture. The notebook rebuilds its DI
 - **Keep sources stable.** The fixture joins historical statuses to immutable evidence by ID. When evidence can be edited, retain immutable source revisions and use the version recorded at the selected time. Resolve citations from the same scoped evidence used by the rule.
 - **Keep findings separate from approvals.** A rule can recommend revisiting a decision. The application owns the approval and can cite the inputs behind the recommendation.
 
-[DecisionProperties](src/main/java/example/architecture/DecisionProperties.java) binds the evidence floor from `decisions.minimum-evidence-confidence`. It defaults to `0.8`. To see what happens when the evidence falls below the floor, run the app with `--decisions.minimum-evidence-confidence=0.99`. The review shows **No source-backed conclusion** and still displays the approved ADR.
+[DecisionProperties](src/main/java/example/architecture/DecisionProperties.java) binds the evidence floor from `decisions.minimum-evidence-confidence`. It defaults to `0.8`. To see what happens when the evidence falls below the floor, start the packaged app with a stricter policy.
+
+```sh
+java -jar target/dice-architecture-decisions.jar --decisions.minimum-evidence-confidence=0.99
+```
+
+The review shows **No source-backed conclusion** and still displays the approved ADR.
 
 ## Tests
 
@@ -59,4 +65,4 @@ The shipped decision record is a read-only fixture. The notebook rebuilds its DI
 ./mvnw verify
 ```
 
-The service tests verify time reconstruction, source citations, derived rule identity, and the missing replay result. The HTTP test exercises both revisions and checks that the packaged API rejects an unknown revision.
+The service tests verify time reconstruction, source citations, derived rule identity, and the missing replay result. Configuration tests verify the stricter floor and reject an out-of-range value at startup. The HTTP test exercises both revisions and checks that the packaged API rejects an unknown revision.

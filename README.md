@@ -39,9 +39,25 @@ The story and source excerpts are synthetic. They are included in [the notebook 
 
 [The notebook](src/main/java/example/architecture/DecisionNotebook.java) seeds a complete empty audit baseline, then records observations through `AuditingPropositionRepository`. A replay clock assigns fixture transaction times. `beliefSetAsOf` reconstructs which claims were present and their status at the time selected by the reader.
 
-The notebook loads the immutable fixture text and source excerpts through `ScopedReadSpec` for one ADR. It projects only the claims active at the selected time to Prolog and asks a declared rule for a conclusion. DICE returns the inputs and rule identity for a derived conclusion. The browser renders those sources separately from the approved decision. The fixture seeds a replay claim under a different ADR to exercise the scope boundary.
+The notebook uses `ScopedReadSpec` to fetch one ADR’s fixture propositions. It joins their immutable text and source references to the statuses reconstructed at the selected time. It projects only the claims active at the selected time to Prolog and asks a declared rule for a conclusion. DICE returns the inputs and rule identity for a derived conclusion. The browser renders those sources separately from the approved decision. The fixture seeds a replay claim under a different ADR to exercise the scope boundary.
 
 Use `GET /api/decision?revision=adopted` or `GET /api/decision?revision=review` to inspect the response. Both return the recorded ADR, premises, review posture, and migration finding. The packaged reader calls the same endpoint.
+
+## Adapting the example
+
+The shipped decision record is a read-only fixture. The notebook rebuilds its DICE proposition store and audit log at startup. Use the DICE SQLite starter and an audit log on the same datasource when users can add evidence or decisions that must survive restart. Install a complete per-ADR baseline before offering historical reads.
+
+- **Scope before projecting.** Build the Prolog projection from claims active in the authorized ADR at the selected time. The rule goal names that context. The scoped input set controls which facts the rule can use.
+- **Keep sources stable.** The fixture joins historical statuses to immutable evidence by ID. When evidence can be edited, retain immutable source revisions and use the version recorded at the selected time. Resolve citations from the same scoped evidence used by the rule.
+- **Keep findings separate from approvals.** A rule can recommend revisiting a decision. The application owns the approval and can cite the inputs behind the recommendation.
+
+[DecisionProperties](src/main/java/example/architecture/DecisionProperties.java) binds the evidence floor from `decisions.minimum-evidence-confidence`. It defaults to `0.8`. To see what happens when the evidence falls below the floor, start the packaged app with a stricter policy.
+
+```sh
+java -jar target/dice-architecture-decisions.jar --decisions.minimum-evidence-confidence=0.99
+```
+
+The review shows **No source-backed conclusion** and still displays the approved ADR.
 
 ## Tests
 
@@ -49,4 +65,4 @@ Use `GET /api/decision?revision=adopted` or `GET /api/decision?revision=review` 
 ./mvnw verify
 ```
 
-The service tests verify time reconstruction, source citations, derived rule identity, and the missing replay result. The HTTP test exercises both revisions and checks that the packaged API rejects an unknown revision.
+The service tests verify time reconstruction, source citations, derived rule identity, and the missing replay result. Configuration tests verify the stricter floor and reject an out-of-range value at startup. The HTTP test exercises both revisions and checks that the packaged API rejects an unknown revision.

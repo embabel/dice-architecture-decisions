@@ -23,6 +23,7 @@ import com.embabel.dice.store.ReadBudget;
 import com.embabel.dice.store.ReadCriteria;
 import com.embabel.dice.store.ReadQuery;
 import com.embabel.dice.store.ScopedReadSpec;
+import org.springframework.stereotype.Service;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -32,6 +33,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+@Service
 final class DecisionNotebook {
 
     private static final String CONTEXT = "adr-024";
@@ -51,6 +53,7 @@ final class DecisionNotebook {
             new Topic("Idempotent delivery", "Consumers could not deduplicate retried deliveries.", "idempotency-old", "idempotency-new"),
             new Topic("Replay recovery", "Can a failed batch be replayed without repeating side effects?", null, "replay-drill"));
 
+    private final DecisionProperties properties;
     private final ReplayClock clock = new ReplayClock(Instant.parse("2026-09-14T16:00:00Z"));
     private final InMemoryAuditLog audit = new InMemoryAuditLog(clock);
     private final InMemoryPropositionRepository repository = new InMemoryPropositionRepository();
@@ -60,7 +63,8 @@ final class DecisionNotebook {
             "Dispatch from a database outbox every 30 seconds. Revisit when queue support exists in both regions "
                     + "and consumers can deduplicate delivery attempts.");
 
-    DecisionNotebook() {
+    DecisionNotebook(DecisionProperties properties) {
+        this.properties = properties;
         audit.initializeBaseline(CONTEXT, clock.instant(), List.of());
         var audited = AuditingPropositionRepository.wrapping(repository, audit);
 
@@ -145,12 +149,12 @@ final class DecisionNotebook {
         var relations = Relations.empty()
                 .withSemanticBetween("Decision", "Gap", "lacks", "missing operating capability")
                 .withSemanticBetween("Decision", "Capability", "verifies", "established operating capability");
-        var edges = RelationBasedGraphProjector.from(relations).withDefaultPolicy(0.8)
+        var edges = RelationBasedGraphProjector.from(relations).withDefaultPolicy(properties.minimumEvidenceConfidence())
                 .projectAll(active, DataDictionary.fromClasses("architecture-decisions")).getProjected();
         var rules = RULES.stream().map(ProofRule::prolog).reduce("", (one, two) -> one + "\n" + two);
         var schema = PrologSchema.Companion.withRules(rules, List.of());
         var projection = new DefaultPrologProjector(null, schema, true, true).projectAll(edges);
-        var result = PrologEvidenceProvider.of(projection, schema).withRepository(repository);
+        var result = PrologEvidenceProvider.of(projection, schema);
         for (var rule : RULES) {
             result = result.withDeclaration(rule.declaration());
         }

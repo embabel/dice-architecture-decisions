@@ -15,11 +15,11 @@ import java.util.Locale;
 @Service
 final class DecisionChat {
 
-    private final DecisionNotebook notebook;
+    private final DecisionRecord record;
     private final ObjectProvider<DecisionAgent> agent;
 
-    DecisionChat(DecisionNotebook notebook, ObjectProvider<DecisionAgent> agent) {
-        this.notebook = notebook;
+    DecisionChat(DecisionRecord record, ObjectProvider<DecisionAgent> agent) {
+        this.record = record;
         this.agent = agent;
     }
 
@@ -28,6 +28,10 @@ final class DecisionChat {
     }
 
     Reply ask(Request request) {
+        return answer(prepare(request));
+    }
+
+    Prepared prepare(Request request) {
         var turns = request.turns();
         if (turns == null || turns.isEmpty() || turns.size() > 17
                 || turns.stream().anyMatch(DecisionChat::invalidTurn) || !"user".equals(turns.getLast().role())) {
@@ -36,19 +40,26 @@ final class DecisionChat {
         }
         DecisionNotebook.DecisionView view;
         try {
-            view = notebook.inspect(request.revision(), Boolean.TRUE.equals(request.replayDrill()));
+            view = record.inspect(request.revision(), Boolean.TRUE.equals(request.replayDrill()));
         } catch (IllegalArgumentException error) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Unknown decision revision");
         }
         if (request.focus() != null && view.graph().nodes().stream().noneMatch(n -> n.id().equals(request.focus()))) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown decision graph node");
         }
+        return new Prepared(view, request.focus(), turns);
+    }
+
+    Reply answer(Prepared prepared) {
+        var view = prepared.view();
+        var focus = prepared.focus();
+        var turns = prepared.turns();
         var model = agent.getIfAvailable();
         if (model == null) {
-            return guided(view, request.focus(), turns);
+            return guided(view, focus, turns);
         }
         try {
-            var draft = model.answer(view, request.focus(), turns);
+            var draft = model.answer(view, focus, turns);
             if (draft == null || draft.text() == null || draft.text().isBlank() || draft.nodeIds() == null
                     || draft.nodeIds().stream().anyMatch(id -> view.graph().nodes().stream().noneMatch(n -> n.id().equals(id)))) {
                 throw new IllegalStateException("The model returned an invalid decision answer.");
@@ -70,7 +81,11 @@ final class DecisionChat {
 
     private static Reply guided(DecisionNotebook.DecisionView view, String focus, List<Turn> turns) {
         var question = turns.getLast().content().toLowerCase(Locale.ROOT);
-        var subject = topic(question);
+        var titled = view.history().stream()
+                .filter(entry -> question.contains(entry.title().toLowerCase(Locale.ROOT)))
+                .filter(entry -> !entry.title().isBlank())
+                .reduce((one, two) -> two);
+        var subject = titled.map(DecisionRecord.Entry::id).orElseGet(() -> topic(question));
         var followUp = question.strip().matches("(why|how so|what about (it|that|this)|what (does|did|is) (this|that|it).*|what evidence is missing|show (me )?the (evidence|source)|which source)[?.!]*");
         if (subject == null && followUp) {
             subject = focus;
@@ -147,6 +162,7 @@ final class DecisionChat {
         return null;
     }
 
+    record Prepared(DecisionNotebook.DecisionView view, String focus, List<Turn> turns) { }
     record Turn(String role, String content) { }
     record Request(String revision, Boolean replayDrill, String focus, List<Turn> turns) { }
     record Reply(String text, List<String> nodeIds, String mode) { }

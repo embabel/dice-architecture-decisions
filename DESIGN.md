@@ -1,10 +1,8 @@
 # Design
 
-The workbench pairs an ivory decision record with a dark proof graph. The graph shows sources, conditions, and rule outcomes in three columns. Chat and the node inspector open the same evidence. The approved ADR sits beside the decision title and can be inspected directly.
+The dark canvas is the workbench's main surface. Four lanes show sources, conditions, rule outcomes, and recorded decisions. D3 draws the connections from the same graph the backend returns. Blue edges connect decision versions, mint marks proven conditions, and dashed amber and violet represent unmet and hypothetical conditions.
 
-## Interaction
-
-- Selecting a node highlights the paths immediately connected to it. The inspector shows the condition status, rule inputs, Prolog text, and original excerpts where available.
-- The checkpoint controls replace the graph and start a fresh conversation. The replay drill switch marks its paths as hypothetical and leaves the approved ADR in view.
-- A chat citation selects its node and moves focus to the inspector. Selecting **Ask about this** puts that node in focus for the next question.
-- On narrow screens the chat and graph stack. All nodes and controls remain keyboard-accessible. Text and line styles carry status alongside color.
+- Select a node to highlight its links and open the evidence inspector. Zoom buttons and the reset control complement canvas panning. Node controls and citations work with the keyboard.
+- Checkpoint controls clear the conversation. The hypothetical replay input changes the rule evaluation for the selected checkpoint. The approved ADR remains available.
+- The inspector shows the version history for recorded decisions. The editor uses the currently selected node as the initial evidence link. Restore adds a new node so the superseded version stays visible.
+- Chat sits beside the canvas at desktop widths. Graph, inspector, and chat stack as the viewport narrows. Status text and edge styles carry meaning alongside color.

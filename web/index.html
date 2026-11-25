@@ -6,14 +6,14 @@
   <meta name="description" content="Explore the evidence and rules behind a DICE architecture decision.">
   <meta name="color-scheme" content="light">
   <title>DICE Architecture Decisions</title>
-  <link rel="stylesheet" href="/app.css">
-  <script src="/app.js" defer></script>
+  <link rel="stylesheet" href="./app.css">
+  <script src="./workbench.ts" type="module"></script>
 </head>
 <body>
   <a class="skip" href="#decision">Skip to decision</a>
   <header class="mast">
     <div class="page mast-inner">
-      <a class="identity" href="/" aria-label="DICE Architecture Decisions home"><span class="mark" aria-hidden="true">D</span> Architecture Decisions</a>
+      <a class="identity" href="/" aria-label="DICE Architecture Decisions home"><span class="mark" aria-hidden="true">◆</span><span><strong>DICE</strong> <span class="mast-separator">/</span> Architecture Decisions</span></a>
       <a href="https://github.com/embabel/dice">DICE on GitHub ↗</a>
     </div>
   </header>
@@ -22,8 +22,8 @@
     <section class="hero" aria-labelledby="title">
       <div>
         <div class="record"><code>ADR-024</code><span>Payments Platform</span></div>
-        <h1 id="title">Poll for outbound webhooks.</h1>
-        <p>We picked a database outbox in September. Follow the evidence to see whether that choice still holds up.</p>
+        <h1 id="title">Poll for outbound webhooks</h1>
+        <p>Trace the evidence for polling, test the path to a queue, and record what the team decides next.</p>
       </div>
       <button id="approved" class="approved" type="button" disabled>
         <span class="approved-indicator" aria-hidden="true"></span>
@@ -52,16 +52,27 @@
         <section class="graph-panel" aria-labelledby="graph-title">
           <header class="graph-header">
             <div><h2 id="graph-title">Decision graph</h2><p>Select a node to see its proof or source.</p></div>
-            <output id="graph-status" class="graph-status" aria-live="polite"></output>
+            <div class="graph-actions">
+              <output id="graph-status" class="graph-status" aria-live="polite"></output>
+              <button id="record-decision" type="button" class="record-button">+ New decision</button>
+            </div>
           </header>
           <div class="graph-scroll" tabindex="0" role="region" aria-label="Decision graph nodes">
             <div id="graph" class="graph"></div>
           </div>
-          <div class="legend">
-            <span><i class="legend-line proved"></i> Proven</span>
-            <span><i class="legend-line blocked"></i> Unmet</span>
-            <span><i class="legend-line hypothetical"></i> What-if</span>
-          </div>
+          <footer class="graph-footer">
+            <div class="legend">
+              <span><i class="legend-line proved"></i> Proven</span>
+              <span><i class="legend-line blocked"></i> Unmet</span>
+              <span><i class="legend-line hypothetical"></i> What-if</span>
+              <span><i class="legend-line recorded"></i> Recorded</span>
+            </div>
+            <div class="zoom-tools" aria-label="Graph zoom">
+              <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
+              <button id="zoom-fit" type="button" aria-label="Reset graph view">100%</button>
+              <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
+            </div>
+          </footer>
         </section>
 
         <section class="inspector" id="inspector" aria-label="Selected graph evidence" tabindex="-1"></section>
@@ -89,5 +100,21 @@
     </div>
     <noscript><p class="record-status">Enable JavaScript to explore the graph and ask about the decision.</p></noscript>
   </main>
+  <dialog id="editor" aria-labelledby="editor-title">
+    <form id="version-form">
+      <header class="editor-header"><h2 id="editor-title">New decision</h2><button id="close-editor" type="button" aria-label="Close">×</button></header>
+      <div id="editor-fields">
+        <label for="decision-title">Decision</label>
+        <input id="decision-title" maxlength="100" placeholder="Run a staged queue pilot" required>
+        <label for="decision-rationale">Rationale</label>
+        <textarea id="decision-rationale" rows="5" maxlength="2000" placeholder="What did the team decide, and why?" required></textarea>
+        <label for="decision-link">Link to a graph node</label>
+        <select id="decision-link"></select>
+      </div>
+      <p id="restore-detail" hidden></p>
+      <p id="editor-error" role="alert" hidden></p>
+      <footer class="editor-footer"><button id="cancel-editor" type="button">Cancel</button><button id="save-decision" type="submit">Record decision</button></footer>
+    </form>
+  </dialog>
 </body>
 </html>

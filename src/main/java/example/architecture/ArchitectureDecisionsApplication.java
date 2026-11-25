@@ -5,6 +5,9 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
@@ -31,10 +34,10 @@ public class ArchitectureDecisionsApplication {
 @RestController
 class DecisionController {
 
-    private final DecisionNotebook notebook;
+    private final DecisionRecord record;
 
-    DecisionController(DecisionNotebook notebook) {
-        this.notebook = notebook;
+    DecisionController(DecisionRecord record) {
+        this.record = record;
     }
 
     @GetMapping("/api/decision")
@@ -43,6 +46,12 @@ class DecisionController {
         if (!revision.equals("review") && !revision.equals("adopted")) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Unknown decision revision");
         }
-        return notebook.inspect(revision, replayDrill);
+        return record.inspect(revision, replayDrill);
+    }
+
+    @PostMapping("/api/decision/versions")
+    @ResponseStatus(HttpStatus.CREATED)
+    DecisionRecord.Entry record(@RequestBody DecisionRecord.Change change) {
+        return record.write(change);
     }
 }

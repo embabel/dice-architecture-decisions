@@ -8,7 +8,7 @@ web
 
 ## Stack
 
-Delegated. Java 21, Spring Boot, DICE, and browser-native HTML, CSS, and JavaScript. A single Maven build produces the runnable app.
+Java 21, Spring Boot, DICE, Embabel, and browser-native HTML, CSS, and JavaScript. A single Maven build produces the runnable app.
 
 ## Users
 
@@ -20,11 +20,11 @@ Show why an architecture decision made sense on the day it was made, then show w
 
 ## Operating Context
 
-A reviewer compares the adoption state with the later review state. Historical reconstruction follows audit transaction time. Source observations carry their own files, lines, and excerpts.
+A reviewer switches between the adoption and review checkpoints, explores the graph, and asks questions about the selected evidence. A what-if replay drill shows how an extra proven condition would change the result.
 
 ## Capabilities and Constraints
 
-The app reconstructs evidence within one ADR context. Recorded rationale stays distinct from rule-derived posture. Missing proof stays unproven. The demonstration is deterministic and runs offline. No fixture describes a real system.
+The app reconstructs evidence within one ADR context. The workbench shows the approved rationale, rule-derived posture, and missing proof. It supports guided chat offline and live Embabel chat with a configured OpenAI key.
 
 ## Product Principles
 

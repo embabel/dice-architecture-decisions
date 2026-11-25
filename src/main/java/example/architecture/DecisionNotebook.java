@@ -148,7 +148,7 @@ final class DecisionNotebook {
         var assumptions = TOPICS.stream().map(topic -> assumption(topic, statuses, byId)).toList();
         var graph = DecisionGraph.build(decision, assumptions, RULES, checks, retain, review, migration, replayDrill,
                 SIMULATED_REPLAY);
-        return new DecisionView(revision, REVISIONS, decision, assumptions, posture, migration, graph);
+        return new DecisionView(revision, REVISIONS, decision, assumptions, posture, migration, graph, List.of());
     }
 
     private Assumption assumption(Topic topic, Map<String, PropositionStatus> statuses, Map<String, Proposition> byId) {
@@ -218,7 +218,7 @@ final class DecisionNotebook {
     record Assumption(String id, String title, String check, String status, EvidenceSource original, EvidenceSource update) { }
     record Finding(String label, String rule, String logic, List<EvidenceSource> evidence) { }
     record DecisionView(Revision revision, List<Revision> revisions, EvidenceSource decision, List<Assumption> assumptions,
-                        Finding posture, Finding migration, DecisionGraph graph) { }
+                        Finding posture, Finding migration, DecisionGraph graph, List<DecisionRecord.Entry> history) { }
     private record Topic(String id, String title, String check, String original, String newer) { }
 
     record Input(String key, String condition, String goal) { }

@@ -8,6 +8,7 @@ export default defineConfig({
   use: { baseURL: address },
   webServer: {
     command: 'java -jar target/dice-architecture-decisions.jar --spring.profiles.active=offline --server.port=' + port,
+    env: { DECISIONS_HISTORY_FILE: 'target/browser-decisions-' + process.pid + '.json' },
     url: address,
     reuseExistingServer: false,
     timeout: 40_000,

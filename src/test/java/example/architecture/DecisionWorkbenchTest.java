@@ -1,5 +1,6 @@
 package example.architecture;
 
+import com.embabel.dice.proposition.store.InMemoryPropositionRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.support.StaticListableBeanFactory;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -16,7 +17,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class DecisionWorkbenchTest {
 
     private final DecisionNotebook notebook = new DecisionNotebook(new DecisionProperties(0.8));
-    private final DecisionChat chat = new DecisionChat(notebook,
+    private final DecisionRecord record = new DecisionRecord(notebook, new InMemoryPropositionRepository());
+    private final DecisionChat chat = new DecisionChat(record,
             new StaticListableBeanFactory().getBeanProvider(DecisionAgent.class));
     private final JsonMapper json = JsonMapper.builder().build();
 
@@ -69,7 +71,7 @@ class DecisionWorkbenchTest {
 
     @Test
     void exercisesTheDecisionAndChatHttpContractsWithoutABoundSocket() throws Exception {
-        var mvc = MockMvcBuilders.standaloneSetup(new DecisionController(notebook), new DecisionChatController(chat)).build();
+        var mvc = MockMvcBuilders.standaloneSetup(new DecisionController(record), new DecisionChatController(chat)).build();
         mvc.perform(get("/api/decision").param("replayDrill", "true"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.graph.hypothetical").value(true));
         mvc.perform(get("/api/decision/chat")).andExpect(jsonPath("$.mode").value("guided"));

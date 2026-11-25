@@ -18,14 +18,13 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
-      - run: ./mvnw -B verify
       - uses: actions/setup-node@v7.1.0
         with:
           node-version: '24'
       - uses: oven-sh/setup-bun@v2.2.0
         with:
           bun-version: '1.4.4'
-      - run: bun install --frozen-lockfile
+      - run: ./mvnw -B verify
       - run: bunx playwright install --with-deps chromium
       - run: bun run test:browser
       - uses: actions/upload-artifact@v7.0.2
@@ -33,3 +32,25 @@ jobs:
           name: architecture-decision-screens
           path: test-results/**/decision-*.png
           if-no-files-found: error
+      - name: Export README captures
+        run: |
+          command -v cwebp >/dev/null || {
+            sudo apt-get update -qq
+            sudo apt-get install -y webp
+          }
+          python3 - <<'PY'
+          import base64
+          import hashlib
+          import pathlib
+          import subprocess
+          import tempfile
+          for png in sorted(pathlib.Path("test-results").rglob("decision-*.png")):
+              with tempfile.TemporaryDirectory() as temp:
+                  webp = pathlib.Path(temp) / "capture.webp"
+                  subprocess.run(["cwebp", "-quiet", "-lossless", "-z", "8", str(png), "-o", str(webp)], check=True)
+                  data = webp.read_bytes()
+              raw = base64.b64encode(data).decode()
+              print(f"CAPTURE_START {png.name} {len(data)} {hashlib.sha256(data).hexdigest()}")
+              for n in range(0, len(raw), 2048):
+                  print(f"CAPTURE_DATA {png.name} {raw[n:n+2048]}")
+          PY

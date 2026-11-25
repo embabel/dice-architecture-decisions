@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test'
 
 test('explores a decision, asks natural questions and tests a hypothetical replay drill', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1440, height: 1024 })
+  await page.route('**/app.js', (route) => route.fulfill({ status: 500, body: 'Legacy script must not load' }))
   await page.goto('/')
   const graph = page.getByRole('region', { name: 'Decision graph nodes' })
   const inspector = page.getByRole('region', { name: 'Selected graph evidence' })
@@ -9,14 +10,19 @@ test('explores a decision, asks natural questions and tests a hypothetical repla
   const question = page.getByRole('textbox', { name: 'Ask about the decision' })
   const ask = page.getByRole('button', { name: 'Ask', exact: true })
 
-  await expect(graph.getByRole('button')).toHaveCount(9)
+  await expect(graph.getByRole('button')).toHaveCount(10)
   await expect(graph.locator('path')).toHaveCount(10)
+  await page.getByRole('button', { name: 'Zoom in' }).click()
+  await expect(page.getByRole('button', { name: 'Reset graph view' })).toHaveText('125%')
+  await page.getByRole('button', { name: 'Reset graph view' }).click()
   await graph.getByRole('button', { name: /Queue availability Updated evidence/ }).click()
   await expect(inspector).toContainText('Regional service matrix')
   await expect(inspector).toContainText('EU West queue deployment')
 
   await question.fill('What is stopping us from migrating to the queue?')
+  const agentResponse = page.waitForResponse(response => response.url().endsWith('/api/decision/agent'))
   await ask.click()
+  expect((await agentResponse).headers()['content-type']).toContain('text/event-stream')
   await expect(conversation).toContainText('Migration review still needs evidence for Replay recovery.')
   await question.fill('What evidence is missing?')
   await ask.click()
@@ -50,8 +56,51 @@ test('explores a decision, asks natural questions and tests a hypothetical repla
 
 async function capture(page, path) {
   await page.evaluate(async () => {
-    window.scrollTo(0, 0)
+    window.scrollTo({ top: 0, behavior: 'instant' })
     await document.fonts.ready
   })
   await page.screenshot({ path, fullPage: true, animations: 'disabled' })
 }
+
+test('records a decision, revises it, and restores a prior version after reloading', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 1024 })
+  await page.goto('/')
+  const graph = page.getByRole('region', { name: 'Decision graph nodes' })
+  const inspector = page.getByRole('region', { name: 'Selected graph evidence' })
+  const dialog = page.getByRole('dialog')
+
+  await graph.getByRole('button', { name: /Replay recovery Unproven/ }).click()
+  await page.getByRole('button', { name: 'New decision' }).click()
+  await dialog.getByLabel('Decision', { exact: true }).fill('Pilot a queue in one region')
+  await dialog.getByLabel('Rationale').fill('Run a replay drill on a canary batch before expanding dispatch.')
+  await dialog.getByRole('button', { name: 'Record decision' }).click()
+  await expect(graph.getByRole('button', { name: 'Pilot a queue in one region Current' })).toBeVisible()
+  await expect(inspector).toContainText('Run a replay drill on a canary batch')
+  await expect(inspector).toContainText('Linked evidence')
+
+  await inspector.getByRole('button', { name: 'Revise decision' }).click()
+  await dialog.getByLabel('Decision', { exact: true }).fill('Extend the queue pilot')
+  await dialog.getByLabel('Rationale').fill('Extend the canary to a second region based on the drill.')
+  await dialog.getByRole('button', { name: 'Save revision' }).click()
+  await expect(graph.getByRole('button', { name: 'Extend the queue pilot Current' })).toBeVisible()
+  await expect(graph.getByRole('button', { name: 'Pilot a queue in one region Superseded' })).toBeVisible()
+
+  await page.reload()
+  await graph.getByRole('button', { name: 'Extend the queue pilot Current' }).click()
+  await inspector.getByRole('button', { name: 'Roll back to v1' }).click()
+  await dialog.getByRole('button', { name: 'Restore version' }).click()
+  await expect(graph.getByRole('button', { name: 'Pilot a queue in one region Current' })).toBeVisible()
+  await expect(graph.getByRole('button', { name: 'Extend the queue pilot Superseded' })).toBeVisible()
+  await expect(inspector.getByRole('button', { name: 'v3', exact: true })).toHaveAttribute('aria-pressed', 'true')
+  await expect(inspector).toContainText('Restored v1')
+
+  await inspector.getByRole('button', { name: 'Ask about this' }).click()
+  await page.getByRole('button', { name: 'Ask', exact: true }).click()
+  await expect(page.locator('#messages')).toContainText('Run a replay drill on a canary batch')
+  await expect(page.locator('#messages').getByRole('button', { name: /Pilot a queue in one region/ })).toBeVisible()
+  await capture(page, testInfo.outputPath('decision-rollback-desktop.png'))
+
+  await page.getByRole('button', { name: /At adoption/ }).click()
+  await expect(graph.getByRole('button', { name: /Pilot a queue/ })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'New decision' })).toBeDisabled()
+})

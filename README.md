@@ -35,6 +35,17 @@ Live chat uses a read-only Embabel action and receives the graph and recent conv
 | `GET /api/decision/chat` | The configured chat mode |
 | `POST /api/decision/chat` | An answer and graph node IDs for the requested checkpoint, scenario, and conversation |
 
+The graph's node IDs can be used as a focus hint when you ask a question. The returned `nodeIds` identify the nodes to open as citations. Send `replayDrill: false` for the recorded checkpoint.
+
+```json
+{
+  "revision": "review",
+  "replayDrill": false,
+  "focus": "migrate",
+  "turns": [{"role": "user", "content": "What evidence would let us review migrating?"}]
+}
+```
+
 The source excerpts and decisions come from the included architecture case. The notebook rebuilds an in-memory proposition store and audit log at startup. An app that records actual decisions can use the DICE SQLite starter and an audit log on the same datasource. Install a complete per-ADR baseline before offering historical reads. [DecisionNotebook](src/main/java/example/architecture/DecisionNotebook.java)
 
 To see the effect of insufficient evidence on the graph, start with a stricter floor.
@@ -45,4 +56,4 @@ java -jar target/dice-architecture-decisions.jar --decisions.minimum-evidence-co
 
 ## Tests
 
-`./mvnw -B verify` runs the packaged HTTP integration tests, scope and replay tests, and a real Embabel action against a scripted provider. No model key is needed for the test suite.
+`./mvnw -B verify` runs the HTTP integration tests, scope and replay tests, and a real Embabel action against a scripted provider. No model key is needed for the test suite.

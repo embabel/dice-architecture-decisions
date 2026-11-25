@@ -440,11 +440,11 @@ async function ask(value: string) {
   let failure = ''
   try {
     await run.runAgent({ forwardedProps: { focus } }, {
-      onTextMessageContentEvent: ({ event, textMessageBuffer }) => {
+      onTextMessageContentEvent: ({ event }) => {
         if (request !== chatNumber) return
         answerId = event.messageId
         assistant ??= message('assistant', '')
-        assistant.body.textContent = textMessageBuffer
+        assistant.body.append(document.createTextNode(event.delta))
         scrollMessages()
       },
       onCustomEvent: ({ event }) => {

@@ -57,3 +57,11 @@ java -jar target/dice-architecture-decisions.jar --decisions.minimum-evidence-co
 ## Tests
 
 `./mvnw -B verify` runs the HTTP integration tests, scope and replay tests, and a real Embabel action against a scripted provider. No model key is needed for the test suite.
+
+The browser test starts the packaged app in guided mode and exercises graph selection, chat, citations, checkpoint switching, and the replay scenario at desktop and mobile widths.
+
+```sh
+bun install --frozen-lockfile
+bunx playwright install chromium
+bun run test:browser
+```

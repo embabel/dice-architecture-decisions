@@ -32,25 +32,3 @@ jobs:
           name: architecture-decision-screens
           path: test-results/**/decision-*.png
           if-no-files-found: error
-      - name: Export README captures
-        run: |
-          command -v cwebp >/dev/null || {
-            sudo apt-get update -qq
-            sudo apt-get install -y webp
-          }
-          python3 - <<'PY'
-          import base64
-          import hashlib
-          import pathlib
-          import subprocess
-          import tempfile
-          for png in sorted(pathlib.Path("test-results").rglob("decision-*.png")):
-              with tempfile.TemporaryDirectory() as temp:
-                  webp = pathlib.Path(temp) / "capture.webp"
-                  subprocess.run(["cwebp", "-quiet", "-lossless", "-z", "8", str(png), "-o", str(webp)], check=True)
-                  data = webp.read_bytes()
-              raw = base64.b64encode(data).decode()
-              print(f"CAPTURE_START {png.name} {len(data)} {hashlib.sha256(data).hexdigest()}")
-              for n in range(0, len(raw), 2048):
-                  print(f"CAPTURE_DATA {png.name} {raw[n:n+2048]}")
-          PY

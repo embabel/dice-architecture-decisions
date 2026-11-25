@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 
-test('explores a decision, asks natural questions and tests a hypothetical replay drill', async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 900 })
+test('explores a decision, asks natural questions and tests a hypothetical replay drill', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 1024 })
   await page.goto('/')
   const graph = page.getByRole('region', { name: 'Decision graph nodes' })
   const inspector = page.getByRole('region', { name: 'Selected graph evidence' })
@@ -24,6 +24,7 @@ test('explores a decision, asks natural questions and tests a hypothetical repla
   await conversation.getByRole('button', { name: /Migration review/ }).last().click()
   await expect(inspector).toBeFocused()
   await expect(inspector).toContainText('Unmet')
+  await capture(page, testInfo.outputPath('decision-graph-desktop.png'))
   await question.fill('Who discovered Neptune?')
   await ask.click()
   await expect(conversation).toContainText('Would you like to know what still blocks migration review?')
@@ -41,4 +42,16 @@ test('explores a decision, asks natural questions and tests a hypothetical repla
   await expect(inspector).toContainText('Regional service matrix')
   await expect(inspector).not.toContainText('EU West queue deployment')
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  await question.fill('Why did we choose polling?')
+  await ask.click()
+  await expect(conversation.getByRole('button', { name: /Approved ADR/ })).toBeVisible()
+  await capture(page, testInfo.outputPath('decision-adoption-mobile.png'))
 })
+
+async function capture(page, path) {
+  await page.evaluate(async () => {
+    window.scrollTo(0, 0)
+    await document.fonts.ready
+  })
+  await page.screenshot({ path, fullPage: true, animations: 'disabled' })
+}

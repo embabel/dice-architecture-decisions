@@ -1,6 +1,7 @@
 package example.architecture;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.ConfigDataApplicationContextInitializer;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -8,6 +9,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 class DecisionNotebookTest {
 
     private final DecisionNotebook notebook = new DecisionNotebook(new DecisionProperties(0.8));
+    private final ApplicationContextRunner context = new ApplicationContextRunner()
+            .withInitializer(new ConfigDataApplicationContextInitializer())
+            .withUserConfiguration(ArchitectureDecisionsApplication.class);
 
     @Test
     void preservesTheRecordedRationaleAndProvesWhyItMatteredAtAdoption() {
@@ -24,9 +28,7 @@ class DecisionNotebookTest {
 
     @Test
     void configuredProjectionFloorCanWithholdTheRecommendation() {
-        new ApplicationContextRunner()
-                .withUserConfiguration(ArchitectureDecisionsApplication.class)
-                .withPropertyValues("decisions.minimum-evidence-confidence=0.99")
+        context.withPropertyValues("decisions.minimum-evidence-confidence=0.99")
                 .run(context -> {
                     var review = context.getBean(DecisionNotebook.class).inspect("review");
                     assertThat(review.posture().label()).isEqualTo("No source-backed conclusion");
@@ -38,9 +40,7 @@ class DecisionNotebookTest {
 
     @Test
     void anInvalidProjectionFloorFailsAtStartup() {
-        new ApplicationContextRunner()
-                .withUserConfiguration(ArchitectureDecisionsApplication.class)
-                .withPropertyValues("decisions.minimum-evidence-confidence=1.1")
+        context.withPropertyValues("decisions.minimum-evidence-confidence=1.1")
                 .run(context -> assertThat(context.getStartupFailure())
                         .hasRootCauseMessage("Minimum evidence confidence must be between 0 and 1"));
     }

@@ -3,6 +3,7 @@ package example.architecture;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -55,8 +56,15 @@ class DecisionHttpTest {
                             """)).build();
             var response = client.send(request, HttpResponse.BodyHandlers.ofString());
             assertThat(response.statusCode()).isEqualTo(200);
-            assertThat(response.body()).containsSequence("RUN_STARTED", "STATE_SNAPSHOT", "TEXT_MESSAGE_START",
-                    "TEXT_MESSAGE_CONTENT", "Replay recovery", "TEXT_MESSAGE_END", "decision.citations", "migrate", "RUN_FINISHED");
+            var json = JsonMapper.builder().build();
+            var events = response.body().lines().filter(line -> line.startsWith("data: "))
+                    .map(line -> json.readTree(line.substring("data: ".length()))).toList();
+            assertThat(events).extracting(event -> event.get("type").asString())
+                    .containsExactly("RUN_STARTED", "STATE_SNAPSHOT", "TEXT_MESSAGE_START",
+                            "TEXT_MESSAGE_CONTENT", "TEXT_MESSAGE_END", "CUSTOM", "RUN_FINISHED");
+            assertThat(events.get(3).get("delta").asString()).contains("Replay recovery");
+            assertThat(events.get(5).get("name").asString()).isEqualTo("decision.citations");
+            assertThat(events.get(5).get("value").get("nodeIds").get(0).asString()).isEqualTo("migrate");
         }
     }
 

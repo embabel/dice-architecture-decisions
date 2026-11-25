@@ -29,6 +29,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -41,17 +42,25 @@ final class DecisionNotebook {
     private static final Revision ADOPTED = new Revision("adopted", "At adoption", Instant.parse("2026-09-14T16:10:00Z"));
     private static final Revision REVIEW = new Revision("review", "Latest review", Instant.parse("2026-11-21T15:45:00Z"));
     private static final List<Revision> REVISIONS = List.of(ADOPTED, REVIEW);
+    private static final Input NO_QUEUE = new Input("queue_gap", "queue", "lacks(Decision, regional_queue_absent)");
+    private static final Input NO_DEDUP = new Input("idempotency_gap", "idempotency", "lacks(Decision, idempotency_absent)");
+    private static final Input QUEUE = new Input("queue_verified", "queue", "verifies(Decision, regional_queue)");
+    private static final Input DEDUP = new Input("idempotency_verified", "idempotency", "verifies(Decision, idempotency)");
+    private static final Input REPLAY = new Input("replay_verified", "replay", "verifies(Decision, replay_drill)");
     private static final List<ProofRule> RULES = List.of(
-            new ProofRule("retain_polling", List.of("lacks(Decision, regional_queue_absent)",
-                    "lacks(Decision, idempotency_absent)")),
-            new ProofRule("revisit_polling", List.of("verifies(Decision, regional_queue)",
-                    "verifies(Decision, idempotency)")),
-            new ProofRule("migration_ready", List.of("verifies(Decision, regional_queue)",
-                    "verifies(Decision, idempotency)", "verifies(Decision, replay_drill)")));
+            new ProofRule("retain_polling", List.of(NO_QUEUE, NO_DEDUP)),
+            new ProofRule("revisit_polling", List.of(QUEUE, DEDUP)),
+            new ProofRule("migration_ready", List.of(QUEUE, DEDUP, REPLAY)));
+    private static final List<Input> INPUTS = List.of(NO_QUEUE, NO_DEDUP, QUEUE, DEDUP, REPLAY);
+    private static final List<ProofRule> PROBES = INPUTS.stream()
+            .map(input -> new ProofRule(input.key(), List.of(input))).toList();
+    private static final String HYPOTHETICAL = "hypothetical-replay";
+    private static final EvidenceSource SIMULATED_REPLAY = new EvidenceSource("Assumed passing replay drill",
+            "Scenario input", 0, null, "Assume the same outbound webhook batch can be replayed without repeating side effects.");
     private static final List<Topic> TOPICS = List.of(
-            new Topic("Queue availability", "The managed queue was unavailable in one dispatch region.", "queue-old", "queue-new"),
-            new Topic("Idempotent delivery", "Consumers could not deduplicate retried deliveries.", "idempotency-old", "idempotency-new"),
-            new Topic("Replay recovery", "Can a failed batch be replayed without repeating side effects?", null, "replay-drill"));
+            new Topic("queue", "Queue availability", "The managed queue was unavailable in one dispatch region.", "queue-old", "queue-new"),
+            new Topic("idempotency", "Idempotent delivery", "Consumers could not deduplicate retried deliveries.", "idempotency-old", "idempotency-new"),
+            new Topic("replay", "Replay recovery", "Can a failed batch be replayed without repeating side effects?", null, "replay-drill"));
 
     private final DecisionProperties properties;
     private final ReplayClock clock = new ReplayClock(Instant.parse("2026-09-14T16:00:00Z"));
@@ -99,6 +108,10 @@ final class DecisionNotebook {
     }
 
     DecisionView inspect(String revisionKey) {
+        return inspect(revisionKey, false);
+    }
+
+    DecisionView inspect(String revisionKey, boolean replayDrill) {
         var revision = REVISIONS.stream().filter(candidate -> candidate.key().equals(revisionKey)).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Unknown revision"));
         var scope = ScopedReadSpec.of(ContextReadScope.ofValues(CONTEXT));
@@ -108,35 +121,49 @@ final class DecisionNotebook {
         var statuses = new LinkedHashMap<String, PropositionStatus>();
         audit.beliefSetAsOf(CONTEXT, revision.at()).forEach(belief -> statuses.put(belief.getId(), belief.getStatus()));
 
-        var active = scoped.stream()
+        var active = new ArrayList<>(scoped.stream()
                 .filter(claim -> statuses.get(claim.getId()) == PropositionStatus.ACTIVE)
                 .map(claim -> claim.withStatus(PropositionStatus.ACTIVE))
-                .toList();
+                .toList());
+        if (replayDrill) {
+            var hypothesis = proposition(HYPOTHETICAL, "verifies", "replay_drill", "successful replay drill",
+                    "Capability", new ConnectorRef("scenario", HYPOTHETICAL));
+            active.add(hypothesis);
+            byId.put(hypothesis.getId(), hypothesis);
+        }
         var provider = provider(active);
+        var retain = findings(provider, byId, "retain_polling", "Retain polling");
         var review = findings(provider, byId, "revisit_polling", "Revisit polling");
-        var posture = review.rule() == null ? findings(provider, byId, "retain_polling", "Retain polling") : review;
+        var posture = review.rule() == null ? retain : review;
         var migration = findings(provider, byId, "migration_ready", "Ready for migration review");
+        var checks = new LinkedHashMap<Input, Finding>();
+        for (var input : INPUTS) {
+            checks.put(input, findings(provider, byId, input.key(), input.condition()));
+        }
         if (migration.rule() == null) {
-            migration = new Finding("Replay safety unproven", null, migration.logic(), migration.evidence());
+            var label = checks.get(REPLAY).rule() == null ? "Replay safety unproven" : "Migration prerequisites incomplete";
+            migration = new Finding(label, null, migration.logic(), migration.evidence());
         }
 
         var assumptions = TOPICS.stream().map(topic -> assumption(topic, statuses, byId)).toList();
-        return new DecisionView(revision, REVISIONS, decision, assumptions, posture, migration);
+        var graph = DecisionGraph.build(decision, assumptions, RULES, checks, retain, review, migration, replayDrill,
+                SIMULATED_REPLAY);
+        return new DecisionView(revision, REVISIONS, decision, assumptions, posture, migration, graph);
     }
 
     private Assumption assumption(Topic topic, Map<String, PropositionStatus> statuses, Map<String, Proposition> byId) {
         var original = topic.original() == null ? null : source(byId.get(topic.original()));
         if (statuses.get(topic.newer()) == PropositionStatus.ACTIVE) {
-            return new Assumption(topic.title(), topic.check(), "superseded", original, source(byId.get(topic.newer())));
+            return new Assumption(topic.id(), topic.title(), topic.check(), "superseded", original, source(byId.get(topic.newer())));
         }
         if (topic.original() != null && statuses.get(topic.original()) == PropositionStatus.ACTIVE) {
-            return new Assumption(topic.title(), topic.check(), "holding", original, null);
+            return new Assumption(topic.id(), topic.title(), topic.check(), "holding", original, null);
         }
-        return new Assumption(topic.title(), topic.check(), "unproven", null, null);
+        return new Assumption(topic.id(), topic.title(), topic.check(), "unproven", null, null);
     }
 
     private Finding findings(PrologEvidenceProvider provider, Map<String, Proposition> byId, String ruleName, String label) {
-        var rule = RULES.stream().filter(candidate -> candidate.name().equals(ruleName)).findFirst().orElseThrow();
+        var rule = java.util.stream.Stream.concat(RULES.stream(), PROBES.stream()).filter(candidate -> candidate.name().equals(ruleName)).findFirst().orElseThrow();
         var evidence = provider.evidence(RuleGoal.of(rule.name() + "(" + DECISION + ")").withContext(CONTEXT));
         if (evidence instanceof Evidence.Derived result) {
             return new Finding(label, result.getRule().getRuleId(), rule.prolog(),
@@ -151,11 +178,12 @@ final class DecisionNotebook {
                 .withSemanticBetween("Decision", "Capability", "verifies", "established operating capability");
         var edges = RelationBasedGraphProjector.from(relations).withDefaultPolicy(properties.minimumEvidenceConfidence())
                 .projectAll(active, DataDictionary.fromClasses("architecture-decisions")).getProjected();
-        var rules = RULES.stream().map(ProofRule::prolog).reduce("", (one, two) -> one + "\n" + two);
-        var schema = PrologSchema.Companion.withRules(rules, List.of());
+        var declared = java.util.stream.Stream.concat(RULES.stream(), PROBES.stream()).toList();
+        var rules = declared.stream().map(ProofRule::prolog).reduce("", (one, two) -> one + "\n" + two);
+        var schema = PrologSchema.Companion.withRules("lacks(_, _) :- fail.\nverifies(_, _) :- fail.\n" + rules, List.of());
         var projection = new DefaultPrologProjector(null, schema, true, true).projectAll(edges);
         var result = PrologEvidenceProvider.of(projection, schema);
-        for (var rule : RULES) {
+        for (var rule : declared) {
             result = result.withDeclaration(rule.declaration());
         }
         return result;
@@ -164,6 +192,11 @@ final class DecisionNotebook {
     private Proposition claim(String id, String predicate, String item, String label, String type, EvidenceSource evidence) {
         var locator = new ConnectorRef("synthetic-architecture-record", evidence.filename() + ":" + evidence.line());
         sourcesByLocator.put(locator.key(), evidence);
+        return proposition(id, predicate, item, label, type, locator);
+    }
+
+    private static Proposition proposition(String id, String predicate, String item, String label, String type,
+                                           ConnectorRef locator) {
         return Proposition.draft(CONTEXT, "Webhook dispatch " + predicate + " " + label, 0.98)
                 .withId(id)
                 .withMentions(List.of(new EntityMention("Webhook dispatch", "Decision", DECISION, MentionRole.SUBJECT),
@@ -174,26 +207,31 @@ final class DecisionNotebook {
     }
 
     private EvidenceSource source(Proposition claim) {
+        if (HYPOTHETICAL.equals(claim.getId())) {
+            return SIMULATED_REPLAY;
+        }
         return sourcesByLocator.get(claim.getProvenanceEntries().getFirst().getLocator().key());
     }
 
     record Revision(String key, String label, Instant at) { }
     record EvidenceSource(String title, String filename, int line, String date, String excerpt) { }
-    record Assumption(String title, String check, String status, EvidenceSource original, EvidenceSource update) { }
+    record Assumption(String id, String title, String check, String status, EvidenceSource original, EvidenceSource update) { }
     record Finding(String label, String rule, String logic, List<EvidenceSource> evidence) { }
     record DecisionView(Revision revision, List<Revision> revisions, EvidenceSource decision, List<Assumption> assumptions,
-                        Finding posture, Finding migration) { }
-    private record Topic(String title, String check, String original, String newer) { }
+                        Finding posture, Finding migration, DecisionGraph graph) { }
+    private record Topic(String id, String title, String check, String original, String newer) { }
 
-    private record ProofRule(String name, List<String> inputs) {
+    record Input(String key, String condition, String goal) { }
+
+    record ProofRule(String name, List<Input> inputs) {
         String prolog() {
-            return name + "(Decision) :-\n    " + String.join(",\n    ", inputs) + ".";
+            return name + "(Decision) :-\n    " + String.join(",\n    ", inputs.stream().map(Input::goal).toList()) + ".";
         }
 
         RuleDeclaration declaration() {
             var result = RuleDeclaration.of(name + "(Decision)");
             for (var input : inputs) {
-                result = result.withInput(input);
+                result = result.withInput(input.goal());
             }
             return result;
         }

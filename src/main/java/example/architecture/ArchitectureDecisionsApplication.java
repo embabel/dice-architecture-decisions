@@ -9,12 +9,22 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.Arrays;
+
 @SpringBootApplication
 @EnableConfigurationProperties(DecisionProperties.class)
 public class ArchitectureDecisionsApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(ArchitectureDecisionsApplication.class, args);
+        var application = new SpringApplication(ArchitectureDecisionsApplication.class);
+        var openAiKey = System.getenv("OPENAI_API_KEY");
+        var configuredProfiles = System.getenv("SPRING_PROFILES_ACTIVE") != null
+                || System.getProperty("spring.profiles.active") != null
+                || Arrays.stream(args).anyMatch(arg -> arg.startsWith("--spring.profiles.active="));
+        if (!configuredProfiles && openAiKey != null && !openAiKey.isBlank()) {
+            application.setAdditionalProfiles("live");
+        }
+        application.run(args);
     }
 }
 
@@ -28,10 +38,11 @@ class DecisionController {
     }
 
     @GetMapping("/api/decision")
-    DecisionNotebook.DecisionView inspect(@RequestParam(defaultValue = "review") String revision) {
+    DecisionNotebook.DecisionView inspect(@RequestParam(defaultValue = "review") String revision,
+                                          @RequestParam(defaultValue = "false") boolean replayDrill) {
         if (!revision.equals("review") && !revision.equals("adopted")) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Unknown decision revision");
         }
-        return notebook.inspect(revision);
+        return notebook.inspect(revision, replayDrill);
     }
 }

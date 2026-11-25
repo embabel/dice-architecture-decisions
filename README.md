@@ -1,68 +1,67 @@
 # DICE Architecture Decisions
 
-Why did we choose polling over a queue? Does the reason still hold? This offline demo lets an engineer review an architecture decision against the information on file at two points in time.
+We picked a database poller for outbound webhooks because a durable queue was missing in one region and consumers had no stable delivery ID. A few months later both gaps had closed. Does that mean we should migrate? Walk the decision graph, open the original evidence, and ask what still needs to be true.
 
-## What you’ll see
+## Run the workbench
 
-In **Latest review**, the decision record pairs each original premise with the later evidence. Open **Inspect the rule trace** to see why DICE recommends revisiting polling. Follow an input to its source excerpt. The replay drill is still unproven, so the approved ADR stays in force.
-
-![Architecture decision review with paired source excerpts, the Revisit polling rule, and the unproven replay drill](https://github.com/embabel/dice-architecture-decisions/releases/download/readme-screenshots/decision-review-desktop.png)
-
-<details>
-<summary>Mobile view</summary>
-
-![Mobile architecture decision record with the revision controls and source evidence](https://github.com/embabel/dice-architecture-decisions/releases/download/readme-screenshots/decision-review-mobile.png)
-
-</details>
-
-## Run it
-
-Install Java 21, then use the Maven wrapper.
+Use Java 21. Set `OPENAI_API_KEY` in your environment to start with a live Embabel agent. The same workbench opens with guided chat when the key is absent.
 
 ```sh
-./mvnw verify
+./mvnw -B verify
 java -jar target/dice-architecture-decisions.jar
 ```
 
-Open [http://127.0.0.1:8082](http://127.0.0.1:8082). Maven resolves dependencies on the first build. The app runs offline after that. It uses the DICE snapshot published by Embabel, a Spring Boot API, and browser-native UI code. You do not need a database, an agent model, or an API key.
+Open the local workbench. Live chat sends the selected graph, its source excerpts, and your conversation to the configured OpenAI model. Use `DECISIONS_CHAT_MODEL` to change the default from `gpt-4.1-mini`. To run guided chat with a key in your environment, pass `--spring.profiles.active=offline`. [Open the workbench](http://127.0.0.1:8082)
 
 ## Walk the decision
 
-1. Open **At adoption**. The September record shows why Payments Platform chose to poll its outbox every 30 seconds. A managed durable queue was unavailable in one region, and the consumer contract had no stable delivery identifier.
-2. Switch to **Latest review**. The queue pilot and revised delivery contract supersede both premises. DICE now derives **Revisit polling**.
-3. Open **Inspect the rule trace**. Follow each input to its source file, line, and excerpt. The original reasoning stays available at both dates.
-4. Inspect **Replay safety unproven**. The migration rule also needs a completed replay drill. Its absence leaves the result unproven. The approved ADR stays in force.
+1. Pick **At adoption**. Follow the queue and idempotency nodes into **Retain polling**. Select **Approved ADR** to read the original decision.
+2. Switch to **Latest review**. Open the source nodes to compare the original excerpts with the queue pilot and new delivery contract. Select **Revisit polling** and expand **View Prolog rule**.
+3. Ask **What blocks migration?** Follow up with **What evidence is missing?** Click an answer citation to open the relevant node in the inspector.
+4. Turn on **Assume a passing replay drill**. At the latest review that opens the path to migration review. Try the same scenario at adoption and the queue and delivery gaps still block it. The approved ADR stays in force in both scenarios.
 
-The story and source excerpts are synthetic. They are included in [the notebook fixture](src/main/java/example/architecture/DecisionNotebook.java).
+Ask in your own words. When the selected record cannot answer, the assistant offers a relevant question it can answer.
 
-## How the demo uses DICE
+## How it works
 
-[The notebook](src/main/java/example/architecture/DecisionNotebook.java) seeds a complete empty audit baseline, then records observations through `AuditingPropositionRepository`. A replay clock assigns fixture transaction times. `beliefSetAsOf` reconstructs which claims were present and their status at the time selected by the reader.
+DICE reconstructs the facts for one ADR at the selected transaction time. Its Prolog projection evaluates the review and migration rules, and checks the individual inputs so the graph can show exactly which edges are proven. The replay drill switch adds a hypothetical fact to that evaluation for one request. The projection, graph, and chat all use the same scoped record. [DecisionNotebook](src/main/java/example/architecture/DecisionNotebook.java)
 
-The notebook uses `ScopedReadSpec` to fetch one ADR’s fixture propositions. It joins their immutable text and source references to the statuses reconstructed at the selected time. It projects only the claims active at the selected time to Prolog and asks a declared rule for a conclusion. DICE returns the inputs and rule identity for a derived conclusion. The browser renders those sources separately from the approved decision. The fixture seeds a replay claim under a different ADR to exercise the scope boundary.
+Live chat uses a read-only Embabel action and receives the graph and recent conversation turns. The app validates any referenced node IDs against the selected graph before returning the answer. Guided chat uses that same graph to answer questions about the decision, evidence, and prerequisites. The workbench starts a fresh conversation when you switch checkpoints or change the scenario. [DecisionAgent](src/main/java/example/architecture/DecisionAgent.java) · [DecisionChat](src/main/java/example/architecture/DecisionChat.java)
 
-Use `GET /api/decision?revision=adopted` or `GET /api/decision?revision=review` to inspect the response. Both return the recorded ADR, premises, review posture, and migration finding. The packaged reader calls the same endpoint.
+| Endpoint | What it returns |
+| --- | --- |
+| `GET /api/decision?revision=adopted` | The ADR and proof graph at adoption |
+| `GET /api/decision?revision=review&replayDrill=true` | The latest review evaluated with a hypothetical passing drill |
+| `GET /api/decision/chat` | The configured chat mode |
+| `POST /api/decision/chat` | An answer and graph node IDs for the requested checkpoint, scenario, and conversation |
 
-## Adapting the example
+The graph's node IDs can be used as a focus hint when you ask a question. The returned `nodeIds` identify the nodes to open as citations. Send `replayDrill: false` for the recorded checkpoint.
 
-The shipped decision record is a read-only fixture. The notebook rebuilds its DICE proposition store and audit log at startup. Use the DICE SQLite starter and an audit log on the same datasource when users can add evidence or decisions that must survive restart. Install a complete per-ADR baseline before offering historical reads.
+```json
+{
+  "revision": "review",
+  "replayDrill": false,
+  "focus": "migrate",
+  "turns": [{"role": "user", "content": "What evidence would let us review migrating?"}]
+}
+```
 
-- **Scope before projecting.** Build the Prolog projection from claims active in the authorized ADR at the selected time. The rule goal names that context. The scoped input set controls which facts the rule can use.
-- **Keep sources stable.** The fixture joins historical statuses to immutable evidence by ID. When evidence can be edited, retain immutable source revisions and use the version recorded at the selected time. Resolve citations from the same scoped evidence used by the rule.
-- **Keep findings separate from approvals.** A rule can recommend revisiting a decision. The application owns the approval and can cite the inputs behind the recommendation.
+The source excerpts and decisions come from the included architecture case. The notebook rebuilds an in-memory proposition store and audit log at startup. An app that records actual decisions can use the DICE SQLite starter and an audit log on the same datasource. Install a complete per-ADR baseline before offering historical reads. [DecisionNotebook](src/main/java/example/architecture/DecisionNotebook.java)
 
-[DecisionProperties](src/main/java/example/architecture/DecisionProperties.java) binds the evidence floor from `decisions.minimum-evidence-confidence`. It defaults to `0.8`. To see what happens when the evidence falls below the floor, start the packaged app with a stricter policy.
+To see the effect of insufficient evidence on the graph, start with a stricter floor.
 
 ```sh
 java -jar target/dice-architecture-decisions.jar --decisions.minimum-evidence-confidence=0.99
 ```
 
-The review shows **No source-backed conclusion** and still displays the approved ADR.
-
 ## Tests
 
-```sh
-./mvnw verify
-```
+`./mvnw -B verify` runs the HTTP integration tests, scope and replay tests, and a real Embabel action against a scripted provider. No model key is needed for the test suite.
 
-The service tests verify time reconstruction, source citations, derived rule identity, and the missing replay result. Configuration tests verify the stricter floor and reject an out-of-range value at startup. The HTTP test exercises both revisions and checks that the packaged API rejects an unknown revision.
+The browser test starts the packaged app in guided mode and exercises graph selection, chat, citations, checkpoint switching, and the replay scenario at desktop and mobile widths.
+
+```sh
+bun install --frozen-lockfile
+bunx playwright install chromium
+bun run test:browser
+```

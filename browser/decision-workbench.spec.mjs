@@ -44,7 +44,7 @@ test('explores a decision, asks natural questions and tests a hypothetical repla
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   await question.fill('Why did we choose polling?')
   await ask.click()
-  await expect(conversation.getByRole('button', { name: /Approved ADR/ })).toBeVisible()
+  await expect(conversation.getByRole('button', { name: /Poll for outbound webhooks/ })).toBeVisible()
   await capture(page, testInfo.outputPath('decision-adoption-mobile.png'))
 })
 

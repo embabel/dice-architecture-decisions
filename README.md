@@ -2,6 +2,8 @@
 
 We picked a database poller for outbound webhooks because a durable queue was missing in one region and consumers had no stable delivery ID. A few months later both gaps had closed. Does that mean we should migrate? Walk the decision graph, open the original evidence, and ask what still needs to be true.
 
+![Decision graph with the migration prerequisites, a cited chat answer, and the evidence inspector](docs/screenshots/decision-graph-desktop.webp)
+
 ## Run the workbench
 
 Use Java 21. Set `OPENAI_API_KEY` in your environment to start with a live Embabel agent. The same workbench opens with guided chat when the key is absent.
@@ -21,6 +23,13 @@ Open the local workbench. Live chat sends the selected graph, its source excerpt
 4. Turn on **Assume a passing replay drill**. At the latest review that opens the path to migration review. Try the same scenario at adoption and the queue and delivery gaps still block it. The approved ADR stays in force in both scenarios.
 
 Ask in your own words. When the selected record cannot answer, the assistant offers a relevant question it can answer.
+
+<details>
+<summary>At adoption on a phone</summary>
+
+![Mobile decision workbench showing the adoption graph, original queue evidence, and cited polling answer](docs/screenshots/decision-adoption-mobile.webp)
+
+</details>
 
 ## How it works
 
@@ -58,7 +67,7 @@ java -jar target/dice-architecture-decisions.jar --decisions.minimum-evidence-co
 
 `./mvnw -B verify` runs the HTTP integration tests, scope and replay tests, and a real Embabel action against a scripted provider. No model key is needed for the test suite.
 
-The browser test starts the packaged app in guided mode and exercises graph selection, chat, citations, checkpoint switching, and the replay scenario at desktop and mobile widths.
+The browser test starts the packaged app in guided mode and exercises graph selection, chat, citations, checkpoint switching, and the replay scenario at desktop and mobile widths. GitHub Actions attaches both screenshots to the Verify run.
 
 ```sh
 bun install --frozen-lockfile

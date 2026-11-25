@@ -28,3 +28,8 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bunx playwright install --with-deps chromium
       - run: bun run test:browser
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: architecture-decision-screens
+          path: test-results/**/decision-*.png
+          if-no-files-found: error
